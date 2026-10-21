@@ -1,1 +1,15 @@
-.venv
+.next/
+node_modules/
+.venv/
+.env*
+!.env.example
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.pyc
+__pycache__/
+data/cache/
+data/raw/
+data/generated/*.json
+!data/generated/.gitkeep

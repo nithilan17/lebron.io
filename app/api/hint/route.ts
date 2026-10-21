@@ -1,0 +1,4 @@
+import { shortestPath } from "@/lib/graph";
+import { puzzleFor, START } from "@/lib/puzzle";
+import { requestSchema } from "@/lib/schemas";
+export async function POST(request: Request) { const body=requestSchema.safeParse(await request.json().catch(()=>null)); if(!body.success) return Response.json({error:"Invalid hint."},{status:400}); const p=puzzleFor(), {chain,puzzleId,graphVersion}=body.data; if(puzzleId!==p.id||graphVersion!==p.graphVersion||chain[0]!==START||new Set(chain).size!==chain.length) return Response.json({error:"Invalid puzzle state."},{status:400}); const path=shortestPath(chain.at(-1)!,p.targetId,new Set(chain.slice(0,-1))); if(!path || path.length<2) return Response.json({error:"Undo a move to find a continuation."},{status:409}); return Response.json({ player:path[1] }); }
