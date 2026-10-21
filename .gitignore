@@ -10,6 +10,8 @@ test-results/
 *.pyc
 __pycache__/
 data/cache/
+# Raw NBA source files stay local; only the compact runtime graph is shipped.
 data/raw/
 data/generated/*.json
+!data/generated/graph.json
 !data/generated/.gitkeep
