@@ -6,7 +6,8 @@ export type Player = { id: string; name: string };
 export type Edge = { a: string; b: string; evidence: Evidence[] };
 export type Graph = { version: string; players: Record<string, Player>; edges: Edge[] };
 
-type CompactArtifact = { version: string; players: Record<string, string>; edges: [string, string, string, string, string, string][] };
+type CompactStint = [string, string, string, string, string];
+type CompactArtifact = { version: string; players: Record<string, string>; edges: [string, string, string, string, string, string, CompactStint?][] };
 
 // Deliberately small verified-development fixture. Production history is generated offline by scripts/import_nba.py.
 const fixture: Graph = {
@@ -40,9 +41,10 @@ function loadArtifact(): Graph | null {
   const data = JSON.parse(fs.readFileSync(artifact, "utf8")) as CompactArtifact;
   if (!data.version || !data.players || !Array.isArray(data.edges)) throw new Error("Invalid roster graph artifact.");
   const players = Object.fromEntries(Object.entries(data.players).map(([id, name]) => [id, { id, name }]));
-  const edges = data.edges.map(([a, b, team, season, gameId, gameDate]) => {
+  const edges = data.edges.map(([a, b, team, season, gameId, gameDate, stints]) => {
     if (!players[a] || !players[b] || !team || !season || !gameId || !gameDate) throw new Error("Invalid roster graph edge.");
-    return { a, b, evidence: [{ team, season, gameId, gameDate }] };
+    const evidence = stints?.map(([stintTeam, firstSeason, lastSeason, stintGameId, stintGameDate]) => ({ team: stintTeam, season: firstSeason === lastSeason ? firstSeason : `${firstSeason}–${lastSeason}`, gameId: stintGameId, gameDate: stintGameDate })) ?? [{ team, season, gameId, gameDate }];
+    return { a, b, evidence };
   });
   return { version: data.version, players, edges };
 }

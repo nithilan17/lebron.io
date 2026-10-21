@@ -1,10 +1,9 @@
 """Build a compact, undirected teammate graph from the cached NBA roster CSV.
 
-The output stores each player pair once.  It is deliberately not an adjacency
+The output stores each player pair once. It is deliberately not an adjacency
 list: the application builds its two-way lookup index in memory, avoiding a
-second copy of every connection in the artifact.  One game of evidence is kept
-per pair, which is enough to explain a move without turning the artifact into a
-copy of every box score.
+second copy of every connection in the artifact. Each connection also records
+the first and last shared season for every team the pair played for together.
 
 Example:
   python scripts/build_roster_graph.py --input data/raw/nba-rosters-1946-2025.csv --output data/generated/graph.json
@@ -32,7 +31,7 @@ def source_hash(source: Path) -> str:
 
 
 def write_json(connection: sqlite3.Connection, output: Path, source: Path) -> tuple[int, int]:
-    version = f"nba-rosters-{source_hash(source)}"
+    version = f"nba-rosters-v2-{source_hash(source)}"
     fd, temporary = tempfile.mkstemp(dir=output.parent, suffix=".tmp")
     players = connection.execute("SELECT COUNT(*) FROM players").fetchone()[0]
     edges = connection.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
@@ -50,10 +49,33 @@ def write_json(connection: sqlite3.Connection, output: Path, source: Path) -> tu
                 handle.write(":")
                 json.dump(name, handle, ensure_ascii=False, separators=(",", ":"))
             handle.write('},"edges":[')
-            for index, row in enumerate(connection.execute("SELECT a, b, team, season, game_id, game_date FROM edges ORDER BY a, b")):
-                if index:
+            edge_index = 0
+            current: tuple[str, str, str, str, str, str] | None = None
+            stints: list[tuple[str, str, str, str, str]] = []
+
+            def write_edge() -> None:
+                nonlocal edge_index
+                if current is None:
+                    return
+                if edge_index:
                     handle.write(",")
-                json.dump(row, handle, ensure_ascii=False, separators=(",", ":"))
+                json.dump([*current, stints], handle, ensure_ascii=False, separators=(",", ":"))
+                edge_index += 1
+
+            rows = connection.execute("""
+                SELECT e.a, e.b, e.team, e.season, e.game_id, e.game_date,
+                       s.team, s.first_season, s.last_season, s.game_id, s.game_date
+                FROM edges e JOIN stints s ON s.a = e.a AND s.b = e.b
+                ORDER BY e.a, e.b, s.first_season, s.team
+            """)
+            for a, b, team, season, game_id, game_date, stint_team, first, last, stint_game_id, stint_game_date in rows:
+                edge = (a, b, team, season, game_id, game_date)
+                if current is not None and edge != current:
+                    write_edge()
+                    stints = []
+                current = edge
+                stints.append((stint_team, first, last, stint_game_id, stint_game_date))
+            write_edge()
             handle.write("]}")
         os.replace(temporary, output)
     except Exception:
@@ -74,6 +96,12 @@ def add_game_edges(connection: sqlite3.Connection) -> None:
         for left, a in enumerate(members):
             for b in members[left + 1:]:
                 connection.execute("INSERT OR IGNORE INTO edges VALUES (?, ?, ?, ?, ?, ?)", (a, b, team, season, game_id, game_date))
+                connection.execute("""
+                    INSERT INTO stints VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(a, b, team) DO UPDATE SET
+                      first_season = MIN(first_season, excluded.first_season),
+                      last_season = MAX(last_season, excluded.last_season)
+                """, (a, b, team, season, season, game_id, game_date))
 
     rows = connection.execute("SELECT game_id, team_id, player_id, team, season, game_date FROM rosters ORDER BY game_id, team_id, player_id")
     for game_id, team_id, player_id, team, season, game_date in rows:
@@ -113,6 +141,12 @@ def main() -> None:
               game_id TEXT NOT NULL, team_id TEXT NOT NULL, player_id TEXT NOT NULL,
               team TEXT NOT NULL, season TEXT NOT NULL, game_date TEXT NOT NULL,
               PRIMARY KEY (game_id, team_id, player_id)
+            ) WITHOUT ROWID;
+            CREATE TABLE stints (
+              a TEXT NOT NULL, b TEXT NOT NULL, team TEXT NOT NULL,
+              first_season TEXT NOT NULL, last_season TEXT NOT NULL,
+              game_id TEXT NOT NULL, game_date TEXT NOT NULL,
+              PRIMARY KEY (a, b, team)
             ) WITHOUT ROWID;
         """)
         with args.input.open(encoding="utf-8-sig", newline="") as handle:
