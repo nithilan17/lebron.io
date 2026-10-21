@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react/no-unescaped-entities */
 import { useEffect, useRef, useState } from "react";
 type Player={id:string;name:string}; type Evidence={team:string;season:string}; type Mode="easy"|"hard";
 type Puzzle={id:string;mode:Mode;date:string;number:number;graphVersion:string;start:Player;target:Player;nextReset:string};
