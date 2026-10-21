@@ -1,4 +1,5 @@
 @import "tailwindcss";
+.tacoRain{position:fixed;inset:0;z-index:100;pointer-events:none;overflow:hidden}.taco{position:absolute;top:-64px;animation:tacoFall var(--duration) cubic-bezier(.18,.68,.4,1) var(--delay) forwards;filter:drop-shadow(0 3px 2px #0007)}@keyframes tacoFall{to{transform:translateY(112vh) rotate(720deg);opacity:.95}}h1[role="button"]{cursor:pointer}h1[role="button"]:focus-visible{outline:2px solid var(--electric);outline-offset:6px;border-radius:4px}
 .playerLink{color:inherit;text-decoration:none}.playerLink:hover,.playerLink:focus-visible{color:var(--electric)}
 .modeToggle{display:flex;gap:4px;width:max-content;margin:18px 0 -18px;padding:4px;border:1px solid #2b70b8;border-radius:12px;background:#082653}.modeToggle button{border:0;border-radius:8px;padding:8px 16px;color:var(--muted)}.modeToggle button.selected{background:#75b9ef;color:#06162f}.modeToggle button.hard.selected{background:#ed174c;color:#fff}
 body h1{gap:0!important}body h1::before{margin-right:10px}@media(max-width:480px){body h1::before{margin-right:7px}}
