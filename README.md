@@ -22,7 +22,7 @@ Then open `http://localhost:3000`. Quality commands: `npm run typecheck`, `npm r
 
 ## Data truthfulness
 
-The checked-in graph is a **development fixture**, not complete NBA history. See [data documentation](docs/DATA.md) for the exact source blocker and production ingestion contract. A production launch needs a rights-reviewed, historical game-roster source and a generated versioned artifact. Gameplay makes no live third-party calls.
+The checked-in graph is a **development fixture**, not complete NBA history. A local, gitignored NBA Stats roster collection now covers 1946–47 through completed 2025–26, but it has not been bundled into the app or released because NBA Stats' terms must be cleared first. See [data documentation](docs/DATA.md) and [game/data rules](RULES.md). Gameplay makes no live third-party calls.
 
 ## API
 

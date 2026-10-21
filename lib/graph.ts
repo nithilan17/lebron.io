@@ -1,10 +1,15 @@
+import fs from "node:fs";
+import path from "node:path";
+
 export type Evidence = { team: string; season: string; gameId: string; gameDate: string };
 export type Player = { id: string; name: string };
 export type Edge = { a: string; b: string; evidence: Evidence[] };
 export type Graph = { version: string; players: Record<string, Player>; edges: Edge[] };
 
+type CompactArtifact = { version: string; players: Record<string, string>; edges: [string, string, string, string, string, string][] };
+
 // Deliberately small verified-development fixture. Production history is generated offline by scripts/import_nba.py.
-export const graph: Graph = {
+const fixture: Graph = {
   version: "fixture-2026.1",
   players: {
     lebron_james: { id: "lebron_james", name: "LeBron James" },
@@ -29,8 +34,40 @@ export const graph: Graph = {
   ].map(([a,b,team,season,date], index) => ({ a, b, evidence: [{ team, season, gameId: `fixture-${index + 1}`, gameDate: date }] })) as Edge[]
 };
 
-export function neighbors(id: string, g = graph) { return g.edges.flatMap(e => e.a === id ? [{ id: e.b, evidence: e.evidence }] : e.b === id ? [{ id: e.a, evidence: e.evidence }] : []); }
-export function edgeBetween(a: string, b: string, g = graph) { return g.edges.find(e => (e.a === a && e.b === b) || (e.a === b && e.b === a)); }
+function loadArtifact(): Graph | null {
+  const artifact = process.env.GRAPH_ARTIFACT || path.join(process.cwd(), "data", "generated", "graph.json");
+  if (!fs.existsSync(artifact)) return null;
+  const data = JSON.parse(fs.readFileSync(artifact, "utf8")) as CompactArtifact;
+  if (!data.version || !data.players || !Array.isArray(data.edges)) throw new Error("Invalid roster graph artifact.");
+  const players = Object.fromEntries(Object.entries(data.players).map(([id, name]) => [id, { id, name }]));
+  const edges = data.edges.map(([a, b, team, season, gameId, gameDate]) => {
+    if (!players[a] || !players[b] || !team || !season || !gameId || !gameDate) throw new Error("Invalid roster graph edge.");
+    return { a, b, evidence: [{ team, season, gameId, gameDate }] };
+  });
+  return { version: data.version, players, edges };
+}
+
+export const graph = loadArtifact() ?? fixture;
+
+type Index = { neighbors: Map<string, { id: string; evidence: Evidence[] }[]>; edges: Map<string, Edge> };
+const indexes = new WeakMap<Graph, Index>();
+function edgeKey(a: string, b: string) { return a < b ? `${a}\0${b}` : `${b}\0${a}`; }
+function indexFor(g: Graph): Index {
+  const previous = indexes.get(g);
+  if (previous) return previous;
+  const neighbors = new Map<string, { id: string; evidence: Evidence[] }[]>();
+  const edges = new Map<string, Edge>();
+  for (const edge of g.edges) {
+    edges.set(edgeKey(edge.a, edge.b), edge);
+    (neighbors.get(edge.a) ?? neighbors.set(edge.a, []).get(edge.a)!).push({ id: edge.b, evidence: edge.evidence });
+    (neighbors.get(edge.b) ?? neighbors.set(edge.b, []).get(edge.b)!).push({ id: edge.a, evidence: edge.evidence });
+  }
+  const index = { neighbors, edges };
+  indexes.set(g, index);
+  return index;
+}
+export function neighbors(id: string, g = graph) { return indexFor(g).neighbors.get(id) ?? []; }
+export function edgeBetween(a: string, b: string, g = graph) { return indexFor(g).edges.get(edgeKey(a, b)); }
 export function shortestPath(start: string, target: string, blocked = new Set<string>(), g = graph): string[] | null {
   const queue: string[][] = [[start]]; const seen = new Set([start, ...blocked]);
   while (queue.length) { const path = queue.shift()!; const here = path.at(-1)!; if (here === target) return path;
