@@ -6,6 +6,7 @@ first source/shape failure so an incomplete run is never treated as complete.
 """
 from __future__ import annotations
 import argparse, csv, json, time
+from datetime import date
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -19,8 +20,8 @@ def seasons(start: int, end: int):
     if start > end: raise ValueError("start season must not exceed end season")
     return [f"{year}-{(year + 1) % 100:02d}" for year in range(start, end + 1)]
 
-def fetch(season: str, season_type: str, retries: int, timeout: int):
-    parameters={"Counter":"0","DateFrom":"","DateTo":"","Direction":"ASC","LeagueID":"00","PlayerOrTeam":"P","Season":season,"SeasonType":season_type,"Sorter":"DATE"}
+def fetch(season: str, season_type: str, retries: int, timeout: int, game_date: str | None = None):
+    parameters={"Counter":"0","DateFrom":game_date or "","DateTo":game_date or "","Direction":"ASC","LeagueID":"00","PlayerOrTeam":"P","Season":season,"SeasonType":season_type,"Sorter":"DATE"}
     req=Request(f"{ENDPOINT}?{urlencode(parameters)}",headers=HEADERS); last=None
     for attempt in range(retries + 1):
         try:
@@ -43,13 +44,20 @@ def rows(payload, season: str, season_type: str):
     return result
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--start",type=int,required=True); parser.add_argument("--end",type=int,required=True); parser.add_argument("--output",type=Path,required=True); parser.add_argument("--delay",type=float,default=1.25); parser.add_argument("--retries",type=int,default=3); parser.add_argument("--timeout",type=int,default=45); parser.add_argument("--overwrite",action="store_true"); args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__); period=parser.add_mutually_exclusive_group(required=True); period.add_argument("--date",help="one game date in YYYY-MM-DD format"); period.add_argument("--start",type=int); parser.add_argument("--end",type=int); parser.add_argument("--output",type=Path,required=True); parser.add_argument("--delay",type=float,default=1.25); parser.add_argument("--retries",type=int,default=3); parser.add_argument("--timeout",type=int,default=45); parser.add_argument("--overwrite",action="store_true"); args=parser.parse_args()
+    if args.date:
+        try: date.fromisoformat(args.date)
+        except ValueError: parser.error("--date must be YYYY-MM-DD")
+        years=[date.fromisoformat(args.date).year if date.fromisoformat(args.date).month >= 10 else date.fromisoformat(args.date).year - 1]
+    else:
+        if args.end is None: parser.error("--end is required with --start")
+        years=range(args.start,args.end+1)
     if args.output.exists() and not args.overwrite: parser.error(f"refusing to overwrite {args.output}")
     data=[]
     try:
-        for season in seasons(args.start,args.end):
+        for season in [f"{year}-{(year + 1) % 100:02d}" for year in years]:
             for game_type in ("Regular Season","Playoffs"):
-                print(f"{season} {game_type}",flush=True); data.extend(rows(fetch(season,game_type,args.retries,args.timeout),season,game_type)); time.sleep(args.delay)
+                print(f"{season} {game_type}",flush=True); data.extend(rows(fetch(season,game_type,args.retries,args.timeout,args.date),season,game_type)); time.sleep(args.delay)
     except (RuntimeError,ValueError) as error: parser.error(str(error))
     args.output.parent.mkdir(parents=True,exist_ok=True)
     with args.output.open("w",encoding="utf-8",newline="") as handle:

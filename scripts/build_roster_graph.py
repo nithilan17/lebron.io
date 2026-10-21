@@ -22,16 +22,17 @@ from pathlib import Path
 REQUIRED = {"PLAYER_ID", "PLAYER_NAME", "TEAM_ID", "TEAM_NAME", "GAME_ID", "GAME_DATE", "SEASON"}
 
 
-def source_hash(source: Path) -> str:
+def source_hash(sources: list[Path]) -> str:
     digest = hashlib.sha256()
-    with source.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+    for source in sources:
+        with source.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
     return digest.hexdigest()[:12]
 
 
-def write_json(connection: sqlite3.Connection, output: Path, source: Path) -> tuple[int, int]:
-    version = f"nba-rosters-v2-{source_hash(source)}"
+def write_json(connection: sqlite3.Connection, output: Path, sources: list[Path]) -> tuple[int, int]:
+    version = f"nba-rosters-v2-{source_hash(sources)}"
     fd, temporary = tempfile.mkstemp(dir=output.parent, suffix=".tmp")
     players = connection.execute("SELECT COUNT(*) FROM players").fetchone()[0]
     edges = connection.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
@@ -116,11 +117,12 @@ def add_game_edges(connection: sqlite3.Connection) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--input", type=Path, action="append", required=True, help="CSV input; repeat for multiple seasons")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if not args.input.is_file():
-        parser.error(f"missing CSV: {args.input}")
+    for source in args.input:
+        if not source.is_file():
+            parser.error(f"missing CSV: {source}")
     if args.output.exists():
         parser.error(f"refusing to overwrite existing output: {args.output}")
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -149,15 +151,16 @@ def main() -> None:
               PRIMARY KEY (a, b, team)
             ) WITHOUT ROWID;
         """)
-        with args.input.open(encoding="utf-8-sig", newline="") as handle:
-            reader = csv.DictReader(handle)
-            if not reader.fieldnames or not REQUIRED.issubset(reader.fieldnames):
-                raise ValueError("CSV is missing required NBA roster columns")
-            for row in reader:
-                if not all(row.get(key) for key in REQUIRED):
-                    raise ValueError("CSV contains a row without player, team, game, date, or season identity")
-                connection.execute("INSERT OR REPLACE INTO players (id, name) VALUES (?, ?)", (row["PLAYER_ID"], row["PLAYER_NAME"]))
-                connection.execute("INSERT OR REPLACE INTO rosters VALUES (?, ?, ?, ?, ?, ?)", (row["GAME_ID"], row["TEAM_ID"], row["PLAYER_ID"], row["TEAM_NAME"], row["SEASON"], row["GAME_DATE"]))
+        for source in args.input:
+            with source.open(encoding="utf-8-sig", newline="") as handle:
+                reader = csv.DictReader(handle)
+                if not reader.fieldnames or not REQUIRED.issubset(reader.fieldnames):
+                    raise ValueError("CSV is missing required NBA roster columns")
+                for row in reader:
+                    if not all(row.get(key) for key in REQUIRED):
+                        raise ValueError("CSV contains a row without player, team, game, date, or season identity")
+                    connection.execute("INSERT OR REPLACE INTO players (id, name) VALUES (?, ?)", (row["PLAYER_ID"], row["PLAYER_NAME"]))
+                    connection.execute("INSERT OR REPLACE INTO rosters VALUES (?, ?, ?, ?, ?, ?)", (row["GAME_ID"], row["TEAM_ID"], row["PLAYER_ID"], row["TEAM_NAME"], row["SEASON"], row["GAME_DATE"]))
         add_game_edges(connection)
         connection.commit()
         players, edges = write_json(connection, args.output, args.input)
