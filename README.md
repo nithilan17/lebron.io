@@ -13,6 +13,18 @@ npm run dev
 
 Then open `http://localhost:3000`. Quality commands: `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`.
 
+## Daily roster automation
+
+`make roster-update` runs the prior Pacific-date roster update, rebuilds the graph if new season rows arrive, and lets the existing updater commit and push only `data/generated/graph.json`. It does not commit when the graph content is unchanged. The default interpreter is `python3`; on this Windows setup, use `make roster-update PYTHON='py -3.12'`.
+
+The target is deliberately not scheduled or invoked by this repository. On a Unix host with GNU Make, a once-daily cron entry can be added when ready (replace the path and log path):
+
+```cron
+15 9 * * * flock -n /tmp/lebron-roster-update.lock make -C /srv/lebron.io roster-update >> /var/log/lebron-roster-update.log 2>&1
+```
+
+The `flock` lock prevents overlapping runs. Before enabling it, run `make roster-update-dry-run` under the same service account and ensure that account has a Git remote with permission to push `main`.
+
 ## What is implemented
 
 - Eastern-date deterministic daily puzzle, server-side validated moves, bounded teammate search, no-repeat chains, undo, give-up, shortest-path hints, and solution reveal.
