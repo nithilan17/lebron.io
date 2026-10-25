@@ -15,6 +15,8 @@ Then open `http://localhost:3000`. Quality commands: `npm run typecheck`, `npm r
 
 ## Daily roster automation
 
+The checked-in puzzle schedule preloads one unique target per difficulty for 365 days. Regenerate it after a graph release with `npm run build:puzzle-schedule` (the current artifact covers 2026-10-25 through 2027-10-24).
+
 `make roster-update` runs the prior Pacific-date roster update, rebuilds the graph if new season rows arrive, and lets the existing updater commit and push only `data/generated/graph.json`. It does not commit when the graph content is unchanged. The default interpreter is `python3`; on this Windows setup, use `make roster-update PYTHON='py -3.12'`.
 
 The target is deliberately not scheduled or invoked by this repository. On a Unix host with GNU Make, a once-daily cron entry can be added when ready (replace the path and log path):

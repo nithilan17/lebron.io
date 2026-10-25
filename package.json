@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build:roster-graph": "python scripts/build_roster_graph.py --input data/raw/nba-rosters-1946-2025.csv --output data/generated/graph.json",
+    "build:puzzle-schedule": "python scripts/generate_puzzle_schedule.py --start-date 2026-10-25",
     "update:roster-graph": "python scripts/update_roster_graph.py"
   },
   "dependencies": {
